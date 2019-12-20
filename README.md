@@ -4,4 +4,4 @@ Transfer manager application designed to help the visually impaired. It can be u
 
 ## Getting Started
 
-These instructions will provide a copy of the project running on your local machine, we do not have a stable version yet, so use of this application is subject to bugs. See deployment for notes on deploying the project to an active system.
+These instructions will provide a copy of the project running on your local machine. We do not have a stable version yet, therefore, the use of this application is subject to errors.
