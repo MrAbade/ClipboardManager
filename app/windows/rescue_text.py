@@ -1,9 +1,10 @@
+#!/usr/bin/env python3
 # encoding: utf-8
 
 import gi
 import sqlite3
 
-from windows.database.queries import SQL_Rescue
+from database.queries import SQL_Rescue
 
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk, Gdk
@@ -57,12 +58,12 @@ class Rescue_Text(Gtk.Window):
 
         self.entry = Gtk.Entry()
         self.entry.connect('key-press-event', self.on_key_press)
-        self.botton_view.attach(self.entry, 1, 0, 2, 1)
+        self.botton_view.attach(self.entry, 1, 0, 4, 1)
 
         # setting up the layout, putting the treeview in a scrollwindow, and the box in a row
         self.scrollable_treelist = Gtk.ScrolledWindow()
         self.scrollable_treelist.set_vexpand(True)
-        self.grid.attach(self.scrollable_treelist, 0, 0, 1, 3)
+        self.grid.attach(self.scrollable_treelist, 0, 0, 1, 5)
         self.grid.attach_next_to(
             self.botton_view, self.scrollable_treelist, Gtk.PositionType.BOTTOM, 1, 1 
         )
@@ -128,7 +129,7 @@ class Rescue_Text(Gtk.Window):
             
     def _delete_last_tag(self):
         new_entry = ''
-        this_entry = self.entry.get_text().replace(' ','').split(',')
+        this_entry = list(map(lambda tag: tag.lstrip(' ').rstrip(' '), self.entry.get_text().split(',')))
         if len(this_entry[-1]) == 0:
             this_entry.pop()
         if len(this_entry) > 0:
@@ -144,7 +145,7 @@ class Rescue_Text(Gtk.Window):
         return True
 
     def _compare_input_tags_with_registered_tags(self):
-        different_values = self.tags - set(self.entry.get_text().replace(" ", "").split(','))
+        different_values = self.tags - set(map(lambda tag: tag.lstrip(' ').rstrip(' '), self.entry.get_text().split(',')))
         excluded_value = []
         for tag in list(different_values):
             if self._is_a_valid_tag(tag):
@@ -152,19 +153,26 @@ class Rescue_Text(Gtk.Window):
         for tag in excluded_value:
             self.tags.discard(tag)
         for p in range(len(self.clipboard_liststore)):
-            row_tags = self.clipboard_liststore[p][2].split(',')
-            row_tags = list(map(lambda tag: tag.lstrip(' ').rstrip(' '), row_tags))
+            try:
+                row_tags = list(map(
+                    lambda tag: tag.lstrip(' ').rstrip(' '),
+                    self.clipboard_liststore.get(self.clipboard_liststore.get_iter(p), 2)[0].split(','))
+                )
+            except ValueError as ve:
+                print(ve)
             for tag in excluded_value:
                 for i in range(len(row_tags)):
                     if tag == row_tags[i]:
                         row_tags.pop(i)
                         break
                 self.clipboard_liststore[p][2] = ', '.join(row_tags)
+                        
+                # delete tuple
                 if len(self.clipboard_liststore[p][2]) == 0:
                     iter =  self.clipboard_liststore.get_iter(p)
                     self.clipboard_liststore.remove(iter)
                     self.clipboard_liststore.unref_node(iter)
-                    
+            
     def _return_last_tag_typed(self):
         # separate words of entry with comma, ignoring spaces
         _tags = self.entry.get_text().split(',')
@@ -182,21 +190,17 @@ class Rescue_Text(Gtk.Window):
         # managed to get more than one ids match
         if len(tuple_of_text_ids) > 0:
             # get all lines matching the passed tag
-            list_of_text_tuple = SQL_Rescue.SQL_TEXT_QUERY(self.cursor, tuple_of_text_ids, tag)
-            return list_of_text_tuple
+            return SQL_Rescue.SQL_TEXT_QUERY(self.cursor, tuple_of_text_ids, tag)
         else:
             return None
 
     def _update_liststore(self, list_of_tuple_of_text_table):
         # get all text in liststore
         texts_liststore = list(map(lambda reg: reg[0].replace('\n', ''), self.clipboard_liststore))
-        
         # get all text in param
         texts_from_list_of_tuple_of_text_table = list(map(lambda reg: reg[0], list_of_tuple_of_text_table))
-
         # get all occurrences that are not contained in liststore
-        text_not_in_liststore = list(set(texts_from_list_of_tuple_of_text_table).difference(texts_liststore))
-
+        text_not_in_liststore = list(set(texts_from_list_of_tuple_of_text_table) - set(texts_liststore))
         # append tuple in liststore if not repeated
         for text_tuple in list_of_tuple_of_text_table:
             if text_tuple[0] in text_not_in_liststore:
@@ -211,9 +215,59 @@ class Rescue_Text(Gtk.Window):
             else:
                 # search the position of current text in liststore
                 text_index = texts_liststore.index(text_tuple[0])
-                tags_of_this_text = self.clipboard_liststore[text_index][2].replace(' ','').split(',')
-                self.clipboard_liststore[text_index][2] = ', '.join(list(set(tags_of_this_text).union(text_tuple[2].replace(' ', '').split(','))))
-
+                tags_of_this_text = list(map(lambda tag: tag.lstrip(' ').rstrip(' '), self.clipboard_liststore[text_index][2].split(',')))
+                self.clipboard_liststore[text_index][2] = ', '.join(list(set(tags_of_this_text).union(list(map(lambda tag: tag.lstrip(' ').rstrip(' '), text_tuple[2].split(','))))))
+                
+                # classifier
+                p = text_index
+                sentinel_len = None
+                sentinel_tuple = None
+                piter = self.clipboard_liststore.get_iter(text_index)
+                if text_index % 2 == 0:
+                    while not piter is None:
+                        len_tags = len(self.clipboard_liststore[piter][2].split(','))
+                        if not sentinel_len is None and len_tags < sentinel_len:
+                            sentinel_tuple = self.clipboard_liststore.get(
+                                self.clipboard_liststore.iter_next(piter),
+                                0, 1, 2
+                            )
+                            self.clipboard_liststore.set_row(
+                                self.clipboard_liststore.iter_next(piter),
+                                self.clipboard_liststore.get(piter, 0, 1, 2)
+                            )
+                            self.clipboard_liststore.set_row(piter, sentinel_tuple)
+                        if p % 2 == 0:
+                            sentinel_len = len_tags
+                        if not self.clipboard_liststore.iter_previous(piter) is None:
+                            piter = self.clipboard_liststore.iter_previous(piter)
+                        else:
+                            self.clipboard_liststore.unref_node(piter)
+                            piter = None
+                        p -= 1
+                else:
+                    while not piter is None:
+                        len_tags = len(self.clipboard_liststore[p][2].split(','))
+                        if not sentinel_len is None and len_tags < sentinel_len:
+                            sentinel_tuple = self.clipboard_liststore.get(
+                                    self.clipboard_liststore.iter_next(piter),
+                                    0, 1, 2
+                            )
+                            self.clipboard_liststore.set_row(
+                                    self.clipboard_liststore.iter_next(piter),
+                                    self.clipboard_liststore.get(piter, 0, 1, 2)
+                            )
+                            self.clipboard_liststore.set_row(piter, sentinel_tuple)
+                            
+                            self.clipboard_liststore[p] = sentinel_tuple
+                        if p % 2 != 0:
+                            sentinel_len = len_tags
+                        if not self.clipboard_liststore.iter_previous(piter) is None:
+                            piter = self.clipboard_liststore.iter_previous(piter)
+                        else:
+                            self.clipboard_liststore.unref_node(piter)
+                            piter = None
+                        p -= 1
+    
     def _update_if_liststore_is_empty(self, list_of_tuple_of_text_table):
         if len(self.clipboard_liststore) != 0:
             return
@@ -233,7 +287,10 @@ class Rescue_Text(Gtk.Window):
 
 
 def rescue_text():
+    
     win = Rescue_Text()
     win.connect("destroy", Gtk.main_quit)
     win.show_all()
     Gtk.main()
+
+rescue_text()
