@@ -40,11 +40,15 @@ class SQL_Entry():
     @staticmethod
     def SQL_TAG_INSERT(cursor, id_text, text_of_entry):
         tags = text_of_entry.split(',')
-        print('antes de inserir as tags')
         for tag in tags:
             tag = tag.rstrip(' ').lstrip(' ')
             cursor.execute('INSERT INTO tags (id_tag, tag, id_text) VALUES (NULL, ?, ?)', (tag, id_text))
-
+    
+    @staticmethod
+    def SQL_TEXT_EXISTS(cursor, text):
+        sql = 'SELECT id_text FROM text WHERE element = ?'
+        id = cursor.execute(sql, (text,))
+        return id.fetchone()
 
 class SQL_Rescue():
     
