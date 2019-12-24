@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # encoding: utf-8
 
 import gi
@@ -5,7 +6,7 @@ import sqlite3
 import time
 import datetime
 
-from windows.database.queries import SQL_Entry
+from database.queries import SQL_Entry
 
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk, Gdk
@@ -25,7 +26,7 @@ class Tag_Entry(Gtk.Window):
         self.box = Gtk.Box(spacing=6)
         self.add(self.box)
 
-        self.label = Gtk.Label("Digite quantas tags achar necessario, separadas por virgula. Depois, tecle ENTER: ")
+        self.label = Gtk.Label("Digite as tags: ")
         self.box.pack_start(self.label, True, True, 0)
 
         self.entry = Gtk.Entry()
@@ -37,11 +38,20 @@ class Tag_Entry(Gtk.Window):
             try:
                 SQL_Entry.SQL_TEXT_CREATE(self.cursor)
                 SQL_Entry.SQL_TAG_CREATE(self.cursor)
-                SQL_Entry.SQL_TAG_INSERT(
-                    self.cursor,
-                    SQL_Entry.SQL_TEXT_INSERT(self.cursor, self.clipboard.wait_for_text()), 
-                    self.entry.get_text()
-                )
+                if len(self.entry.get_text()) > 0:
+                    id_text_exists = SQL_Entry.SQL_TEXT_EXISTS(self.cursor, self.clipboard.wait_for_text())
+                    if not id_text_exists is None:
+                        SQL_Entry.SQL_TAG_INSERT(
+                                self.cursor,
+                                id_text_exists[0],
+                                self.entry.get_text()
+                            )
+                    else:
+                        SQL_Entry.SQL_TAG_INSERT(
+                            self.cursor,
+                            SQL_Entry.SQL_TEXT_INSERT(self.cursor, self.clipboard.wait_for_text()), 
+                            self.entry.get_text()
+                        )
             except sqlite3.Error as err:
                 print(err.args[0])
             finally:
@@ -53,3 +63,5 @@ def tag_entry():
     win.connect("destroy", Gtk.main_quit)
     win.show_all()
     Gtk.main()
+
+tag_entry()
